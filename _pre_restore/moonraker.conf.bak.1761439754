@@ -1,0 +1,14 @@
+[server]
+host: 0.0.0.0
+port: 7125
+config_path: ~/printer_data/config
+data_path:   ~/printer_data/database
+log_path:    ~/printer_data/logs
+
+[authorization]
+trusted_clients:
+  127.0.0.1
+  192.168.1.0/24
+
+[server]
+klippy_uds_address: ~/printer_data/comms/klippy.sock

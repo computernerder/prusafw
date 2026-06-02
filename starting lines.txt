@@ -1,0 +1,3 @@
+PRINT_START EXTRUDER=[nozzle_temperature_initial_layer]  BED=[first_layer_bed_temperature] FILAMENT=[filament_type] DEBUG=1 CLEAN=1
+
+PRINT_END
