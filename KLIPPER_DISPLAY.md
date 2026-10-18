@@ -40,3 +40,6 @@ filename, elapsed time, loaded filament, and tracked Revo position. Pressing
 the knob opens controls for selecting/starting a file, pause/resume, confirmed
 safe stop, and tracked filament loading/unloading. Safe stop calls the existing
 Revo-aware `CANCEL_PRINT` macro.
+
+The header uses Jeric's approved native-resolution `240x100` red shark bitmap;
+the printer does not scale it before drawing it on the LCD.
