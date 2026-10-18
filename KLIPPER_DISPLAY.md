@@ -32,3 +32,11 @@ This returns printer control without changing MCU firmware.
 - Encoder click: `PE12`
 
 These values match Jeric's archived, previously used MINI configuration.
+
+## Jeric dashboard and controls
+
+The idle/printing dashboard shows temperatures, printer state, progress,
+filename, elapsed time, loaded filament, and tracked Revo position. Pressing
+the knob opens controls for selecting/starting a file, pause/resume, confirmed
+safe stop, and tracked filament loading/unloading. Safe stop calls the existing
+Revo-aware `CANCEL_PRINT` macro.

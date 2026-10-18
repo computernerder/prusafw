@@ -1,4 +1,4 @@
-From 2f9064d4e18e04e755e8ed9e58021f5c8300d666 Mon Sep 17 00:00:00 2001
+From 270438d9f1df473025623c14c69fbf32ddeae415 Mon Sep 17 00:00:00 2001
 From: Jeric Dante <computernerder@gmail.com>
 Date: Sun, 18 Oct 2026 15:06:59 -0400
 Subject: [PATCH] display: port Prusa MINI ST7789V support
@@ -6,9 +6,9 @@ Subject: [PATCH] display: port Prusa MINI ST7789V support
 ---
  klippy/extras/bus.py             |   4 +-
  klippy/extras/display/display.py |  12 +-
- klippy/extras/display/logo.py    |  33 +++
- klippy/extras/display/st7789v.py | 381 +++++++++++++++++++++++++++++++
- 4 files changed, 425 insertions(+), 5 deletions(-)
+ klippy/extras/display/logo.py    |  46 ++++
+ klippy/extras/display/st7789v.py | 403 +++++++++++++++++++++++++++++++
+ 4 files changed, 460 insertions(+), 5 deletions(-)
  create mode 100644 klippy/extras/display/logo.py
  create mode 100644 klippy/extras/display/st7789v.py
 
@@ -75,13 +75,15 @@ index cc33bc15..5abd3519 100644
          return eventtime + REDRAW_TIME
 diff --git a/klippy/extras/display/logo.py b/klippy/extras/display/logo.py
 new file mode 100644
-index 00000000..2e6a8206
+index 00000000..1715f54a
 --- /dev/null
 +++ b/klippy/extras/display/logo.py
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,46 @@
 +# Compact, dependency-light branding for the Prusa MINI color display.
 +#
 +# This file may be distributed under the terms of the GNU GPLv3 license.
++import os
++
 +from PIL import Image, ImageDraw, ImageFont
 +
 +LOGO_IMAGE = None
@@ -91,42 +93,54 @@ index 00000000..2e6a8206
 +    global LOGO_IMAGE
 +    if LOGO_IMAGE is None or LOGO_IMAGE.width != width:
 +        height = max(54, width // 2)
-+        image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
++        scale = 4
++        canvas_size = (width * scale, height * scale)
++        image = Image.new('RGBA', canvas_size, (0, 0, 0, 0))
 +        draw = ImageDraw.Draw(image)
 +        red = (225, 20, 35, 255)
 +        white = (245, 245, 245, 255)
 +        # A small forward-facing shark silhouette, drawn without external assets.
-+        mid = height // 3
-+        body = [(5, mid), (width // 3, 7), (width - 8, mid),
-+                (width // 3, mid + 16)]
++        mid = height * scale // 3
++        body = [(5 * scale, mid), (width * scale // 3, 7 * scale),
++                ((width - 8) * scale, mid),
++                (width * scale // 3, mid + 16 * scale)]
 +        draw.polygon(body, fill=red)
-+        draw.polygon([(width // 3, 9), (width // 2, 0),
-+                      (width // 2, 15)], fill=red)
-+        draw.polygon([(8, mid), (0, mid - 12), (0, mid + 12)], fill=red)
-+        draw.ellipse((width - 27, mid - 4, width - 23, mid), fill=white)
++        draw.polygon([(width * scale // 3, 9 * scale),
++                      (width * scale // 2, 0),
++                      (width * scale // 2, 15 * scale)], fill=red)
++        draw.polygon([(8 * scale, mid), (0, mid - 12 * scale),
++                      (0, mid + 12 * scale)], fill=red)
++        draw.ellipse(((width - 27) * scale, mid - 4 * scale,
++                      (width - 23) * scale, mid), fill=white)
 +        label = 'JERIC MINI'
-+        font = ImageFont.load_default()
++        font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
++        if not os.path.exists(font_path):
++            font = ImageFont.load_default()
++        else:
++            font = ImageFont.truetype(font_path, 10 * scale)
 +        bbox = draw.textbbox((0, 0), label, font=font)
 +        text_width = bbox[2] - bbox[0]
-+        draw.text(((width - text_width) // 2, height - 14), label,
++        draw.text(((width * scale - text_width) // 2,
++                   height * scale - 14 * scale), label,
 +                  font=font, fill=white)
-+        LOGO_IMAGE = image
++        LOGO_IMAGE = image.resize((width, height), Image.Resampling.LANCZOS)
 +    return LOGO_IMAGE.copy()
 diff --git a/klippy/extras/display/st7789v.py b/klippy/extras/display/st7789v.py
 new file mode 100644
-index 00000000..a07d37c2
+index 00000000..e0e21136
 --- /dev/null
 +++ b/klippy/extras/display/st7789v.py
-@@ -0,0 +1,381 @@
+@@ -0,0 +1,403 @@
 +# Support for ST7789V (240x320 graphics) LCD displays
 +#
 +# Copyright (C) 2021  Matthew Lloyd <github@matthewlloyd.net>
 +#
 +# This file may be distributed under the terms of the GNU GPLv3 license.
++import os
 +import sys
 +import numpy
 +import time
-+from PIL import Image, ImageChops, ImageDraw
++from PIL import Image, ImageChops, ImageDraw, ImageFont
 +from .. import bus
 +from . import font8x14, logo
 +
@@ -137,8 +151,8 @@ index 00000000..a07d37c2
 +# Screen size
 +ST7789V_ROWS = 320
 +ST7789V_COLS = 240
-+ST7789V_FONT_WIDTH   =  8
-+ST7789V_FONT_HEIGHT  = 16
++ST7789V_FONT_WIDTH   = 10
++ST7789V_FONT_HEIGHT  = 20
 +
 +# Commands
 +ST7789V_CMD_SLPIN     = 0x10
@@ -205,8 +219,7 @@ index 00000000..a07d37c2
 +        self.ui_size = (
 +            self.ui_bottom_right[0] - self.ui_top_left[0],
 +            self.ui_bottom_right[1] - self.ui_top_left[1])
-+        self.font = [self._rowmajor_bitmap_to_image(b)
-+                     for b in font8x14.VGA_FONT]
++        self.font = self._load_font()
 +        self.icons = {}
 +    def x_y_to_offset(self, x, y):
 +        return y * ST7789V_COLS + x
@@ -217,6 +230,26 @@ index 00000000..a07d37c2
 +                self.ui_top_left[1] + r * ST7789V_FONT_HEIGHT)
 +    def _rowmajor_bitmap_to_image(self, b, width=8):
 +        return Image.frombytes('1', (width, len(b) // (width // 8)), b)
++    def _load_font(self):
++        font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf'
++        if not os.path.exists(font_path):
++            return [self._rowmajor_bitmap_to_image(b)
++                    for b in font8x14.VGA_FONT]
++        font = ImageFont.truetype(font_path, 17)
++        glyphs = []
++        for code in range(256):
++            glyph = Image.new('L',
++                              (ST7789V_FONT_WIDTH, ST7789V_FONT_HEIGHT), 0)
++            draw = ImageDraw.Draw(glyph)
++            char = bytes([code]).decode('latin-1')
++            bbox = font.getbbox(char)
++            width = bbox[2] - bbox[0]
++            height = bbox[3] - bbox[1]
++            x_pos = (ST7789V_FONT_WIDTH - width) // 2 - bbox[0]
++            y_pos = (ST7789V_FONT_HEIGHT - height) // 2 - bbox[1]
++            draw.text((x_pos, y_pos), char, font=font, fill=255)
++            glyphs.append(glyph)
++        return glyphs
 +    def rgb_to_565(self, rgb):
 +        r = rgb[0] >> 3 & 0x1f
 +        g = rgb[1] >> 2 & 0x3f
@@ -347,7 +380,9 @@ index 00000000..a07d37c2
 +        if x + len(data) > width:
 +            data = data[:width - min(x, width)]
 +        for i, char in enumerate(data):
-+            self.vram.paste(self.font[ord(char)], self.ui_c_r_to_x_y(x + i, y))
++            glyph = self.font[ord(char)]
++            self.vram.paste((245, 245, 245),
++                            self.ui_c_r_to_x_y(x + i, y), glyph)
 +        self._invalidate(
 +            self.ui_c_r_to_x_y(x, y),
 +            (len(data) * ST7789V_FONT_WIDTH, ST7789V_FONT_HEIGHT))
@@ -355,7 +390,7 @@ index 00000000..a07d37c2
 +        im = self._rowmajor_bitmap_to_image(
 +            numpy.array(data, dtype=numpy.uint8), 8)
 +        xy = self.ui_c_r_to_x_y(x, y)
-+        self.vram.paste(im, xy)
++        self.vram.paste((245, 245, 245), xy, im)
 +        self._invalidate(xy, im.size)
 +    def set_glyphs(self, glyphs):
 +        for glyph_name, glyph_data in glyphs.items():
@@ -376,7 +411,7 @@ index 00000000..a07d37c2
 +        xy = self.ui_c_r_to_x_y(x, y)
 +        if icon is not None and x < self.get_dimensions()[0] - 2:
 +            # Draw icon in graphics mode.
-+            self.vram.paste(icon, box=xy)
++            self.vram.paste((245, 245, 245), box=xy, mask=icon)
 +            self._invalidate(xy, icon.size)
 +            return 2
 +        char = TextGlyphs.get(glyph_name)
@@ -394,7 +429,7 @@ index 00000000..a07d37c2
 +    def get_dimensions(self):
 +        return self.ui_width_chars, self.ui_height_chars
 +    def render_logo(self):
-+        logo_width = ST7789V_COLS // 2
++        logo_width = ST7789V_COLS - 20
 +        if self.logo is None:
 +            self.logo = logo.make_logo(logo_width)
 +        x_pos = (ST7789V_COLS - logo_width) // 2
