@@ -24,7 +24,7 @@ This returns printer control without changing MCU firmware.
 
 ## Pin mapping
 
-- SPI bus: `spi2` (`PB14`, `PB15`, `PB13`)
+- SPI bus: `spi2a` (`PC2`, `PC3`, `PB10`)
 - Reset: `PC8`
 - Chip-select: `PC9`
 - Command/data: `PD11`
